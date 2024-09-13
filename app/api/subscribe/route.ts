@@ -1,6 +1,34 @@
 import { NextResponse } from "next/server";
 
+const rateLimitMap = new Map(); // IP 주소 별 요청 카운트를 저장할 Map
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1분
+const MAX_REQUESTS = 5; // 1분에 최대 5회 요청 허용
+
+function checkRateLimit(ip: string) {
+  const currentTime = Date.now();
+  const requestLog = rateLimitMap.get(ip) || [];
+  const filteredLog = requestLog.filter(
+    (time: number) => currentTime - time < RATE_LIMIT_WINDOW
+  );
+
+  rateLimitMap.set(ip, [...filteredLog, currentTime]);
+  return filteredLog.length < MAX_REQUESTS;
+}
+
 export async function POST(req: Request) {
+  const ip =
+    req.headers.get("x-forwarded-for") ||
+    req.headers.get("remote-addr") ||
+    "unknown";
+
+  // Rate limit 검사
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: "요청이 너무 많습니다. 나중에 다시 시도해주세요." },
+      { status: 429 }
+    );
+  }
+
   const { email } = await req.json();
 
   if (!email) {
